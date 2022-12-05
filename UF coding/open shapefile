@@ -1,0 +1,17 @@
+import geopandas as gpd
+df=gpd.read_file("/Users/xiaomeihai/Desktop/county/cb_2018_us_county_500k.shp")
+FL=FL = df[(df["STATEFP"]=="12")]
+
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(10,10))
+FL.plot(ax=ax,column="GEOID", cmap="Blues")
+ax.axis("off")
+ax.set_title("FL counties", fontdict={"fontsize":"14","fontweight":"5"})
+
+import matplotlib.pyplot as plt 
+import matplotlib.patches as mpatches
+county_shapes = gpd.read_file('https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_county_500k.zip')
+
+
+import pandas as pd
+hurricane_df = pd.read_csv(r'https://raw.githubusercontent.com/JackOgozaly/Hurricane_Crop_Acreage/main/Data/historical_hurricane_date.csv')
