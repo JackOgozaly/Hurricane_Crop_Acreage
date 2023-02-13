@@ -140,13 +140,16 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 county_shapes = gpd.read_file('https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_county_500k.zip')
-
+county_shapes_12 = county_shapes[county_shapes['STATEFP'] == '12'].reset_index(drop=True)
+county_shapes_12 = county_shapes_12.set_crs("EPSG:3347", allow_override=True)
+county_shapes_12["full_area"] = county_shapes_12.geometry.area
+county_shapes_12 = county_shapes_12.drop(columns=["COUNTYNS","AFFGEOID","GEOID","LSAD","ALAND","AWATER"])
 
 #plt.style.use('default')
 fig, ax = plt.subplots(figsize=(10,8))
 
 #Create our county shapefiles and plot them
-counties = gpd.GeoSeries(county_shapes['geometry'])
+counties = gpd.GeoSeries(county_shapes_12['geometry'])
 counties.plot(ax=ax, color='white', edgecolor='black')
 
 irma_shape = unary_union(hurricane_irma_ts)
@@ -180,89 +183,106 @@ plt.legend(handles=[legend1, legend2, legend3])
 
 ##changing series to dataframe 
 pgdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(p))
+pgdf  = pgdf.set_crs("EPSG:3347", allow_override=True)
 p2gdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(p2))
+p2gdf = p2gdf.set_crs("EPSG:3347", allow_override=True)
 p3gdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(p3))
-
+p3gdf = p3gdf.set_crs("EPSG:3347", allow_override=True)
 
 ##intersecting and adding area to data frame
-impacted_counties = gpd.overlay(county_shapes, pgdf, how = 'intersection')
+## this is good to use 
+impacted_counties = gpd.overlay(pgdf, county_shapes_12,  how = 'intersection', keep_geom_type=True)
 impacted_counties.plot()
-impacted_counties['Area']=impacted_counties.area
+impacted_counties["Imp_area"] = impacted_counties.geometry.area
+impacted_counties['OverlapIntersection']=(impacted_counties["Imp_area"] / impacted_counties["full_area"])*100
 impacted_counties['Wind_Speed']= '34kt Winds'
+impacted_counties = impacted_counties.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry', 'full_area', 'Imp_area', 'OverlapIntersection','Wind_Speed'])
 
-impacted_counties2 = gpd.overlay(county_shapes, p2gdf, how = 'intersection')
+## need to add 0 to N/A county before calculate 
+impacted_counties2 = gpd.overlay(county_shapes_12, p2gdf, how = 'intersection', keep_geom_type=True)
+impacted_counties2["Imp_area"] = impacted_counties2.geometry.area
 impacted_counties2.plot()
-impacted_counties2['Area']=impacted_counties2.area
-impacted_counties2['Wind_Speed']= '50kt Winds' 
 
+impacted_counties2_merged = pd.merge(county_shapes_12,impacted_counties2[["COUNTYFP","Imp_area"]],on='COUNTYFP', how='left')
+impacted_counties2_merged["Imp_area"] = impacted_counties2_merged["Imp_area"].fillna(0)
 
-impacted_counties3 = gpd.overlay(county_shapes, p3gdf, how = 'intersection')
+impacted_counties2_merged['OverlapIntersection']= (impacted_counties2_merged["Imp_area"] / impacted_counties2_merged["full_area"])*100
+impacted_counties2_merged['Wind_Speed']= '50kt Winds'
+
+## need to add 0 to N/A county before calculate 
+impacted_counties3 = gpd.overlay(county_shapes_12, p3gdf, how = 'intersection', keep_geom_type=True)
+impacted_counties3["Imp_area"] = impacted_counties3.geometry.area
 impacted_counties3.plot()
-impacted_counties3['Area']=impacted_counties3.area
-impacted_counties3['Wind_Speed']= '64kt Winds'
 
-#Impacted counties dataframe appended together
-impacted_counties_final = impacted_counties.append([impacted_counties2, impacted_counties3]) 
-impacted_counties['ALAND'].value_counts()
-#impacted_counties_final = impacted_counties_final.rename(columns={'COUNTYFP': 'county_code'})
+impacted_counties3_merged = pd.merge(county_shapes_12,impacted_counties3[["COUNTYFP","Imp_area"]],on='COUNTYFP', how='left')
+impacted_counties3_merged["Imp_area"] = impacted_counties3_merged["Imp_area"].fillna(0)
+
+impacted_counties3_merged['OverlapIntersection']= (impacted_counties3_merged["Imp_area"] / impacted_counties3_merged["full_area"])*100
+impacted_counties3_merged['Wind_Speed']= '64kt Winds'
+
+##Appending three dfs
+impacted_counties_final = impacted_counties.append([impacted_counties2_merged, impacted_counties3_merged]) 
+
+##Wind to Columns
+df_wind_col = impacted_counties_final.groupby(['COUNTYFP', 'Wind_Speed'])[['Imp_area']].sum().reset_index()
+df_wind_col = df_wind_col.set_index(['COUNTYFP', 'Wind_Speed']).Imp_area.unstack(fill_value='')
+
+##Merged datasets
+df_merged_final = pd.merge(county_shapes_12, df_wind_col, how = 'left', on = 'COUNTYFP')
+df_merged_final['34kt_pct'] = (df_merged_final["34kt Winds"] / df_merged_final["full_area"])*100
+df_merged_final['50kt_pct'] = (df_merged_final["50kt Winds"] / df_merged_final["full_area"])*100
+df_merged_final['64kt_pct'] = (df_merged_final["64kt Winds"] / df_merged_final["full_area"])*100
+df_merged_final = df_merged_final.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry', 'full_area', '34kt Winds', '34kt_pct','50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct'])
 
 #Cause of loss
 cause_of_loss_4 = pd.read_parquet('https://github.com/JackOgozaly/Hurricane_Crop_Acreage/blob/main/Data/Cause_Of_Loss/crop_loss_data_4.parquet.gzip?raw=true')
 cause_of_loss_4 = cause_of_loss_4.rename(columns = {'county_code':'COUNTYFP', 'state_code':'STATEFP'})
 
-
-#idea for slicing df
-df12 = county_shapes[['STATEFP','COUNTYFP','GEOID','NAME','geometry']]
-df12 = df12[df12['STATEFP'] == '12']
-
-df_wind_col = pd.merge(df12, impacted_counties_final, how = 'left', on = 'COUNTYFP')
-df_wind_col = df_wind_col.groupby(['COUNTYFP', 'Wind_Speed'])['Area'].sum().reset_index()
-df_wind_col = df_wind_col.set_index(['COUNTYFP', 'Wind_Speed']).Area.unstack(fill_value='')
-df_wind_col
-
-#Merged datasets
-county_shapes_merge = county_shapes.copy()
-county_shapes_merge = county_shapes_merge[county_shapes_merge['STATEFP'] == '12']
-df_merged_final = pd.merge(county_shapes_merge, df_wind_col, how = 'left', on = 'COUNTYFP')
-
 #Cause of loss clean
 cause_of_loss_4_clean = cause_of_loss_4.drop(columns=["insurance_plan_name_abbreviation","subsidy","state/private_subsidy","additional_subsidy","efa_premium_discount","producer_paid_premium","insurance_plan_code","stage_code","net_endorsed_acres"])
 cause_of_loss_4_clean = cause_of_loss_4_clean[cause_of_loss_4_clean['year_of_loss'] == 2017]
+cause_of_loss_4_clean = cause_of_loss_4_clean[(cause_of_loss_4_clean['month_of_loss'] == '8')|(cause_of_loss_4_clean['month_of_loss'] == '9')]
 cause_of_loss_4_clean = cause_of_loss_4_clean[cause_of_loss_4_clean['cause_of_loss_description'] == 'Hurricane/Tropical Depression']
 cause_of_loss_4_clean = cause_of_loss_4_clean[cause_of_loss_4_clean['STATEFP'] == '12'].reset_index(drop=True)
 cause_of_loss_4_clean = cause_of_loss_4_clean.drop(columns = ['commodity_year_identifier','commodity_code','coverage_category','cause_of_loss_code','policies_earning_premium','policies_identified'])
+cause_of_loss_4_clean_group=cause_of_loss_4_clean.groupby(['COUNTYFP'])[['total_premium','indemnity_amount']].sum()
+
+##Merge df_merged_final with cause of loss
+final_data = pd.merge(df_merged_final,cause_of_loss_4_clean_group,on='COUNTYFP', how='left').fillna(0)
 
 
-#final df
-final_df_cause_of_loss = cause_of_loss_4_clean.merge(df_merged_final, on='COUNTYFP', how='left')
+## building a model 
+##Set up the dependent and the independent variables
+final_data
+x=pd.DataFrame(final_data.iloc[:,4:-1])
+y=pd.DataFrame(final_data.iloc[:,-1])
+
+##Divide the data into train and test sets
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(x,y,test_size= 0.2, random_state=5)
 
 
+##Train the algorithm:
+from sklearn import linear_model as lm
+linreg = lm.LinearRegression()
+linreg.fit(x_train, y_train)
 
+##Having a look at the coefficients that the model has chosen
+v = pd.DataFrame(linreg.coef_, index=['co-efficient']).transpose()
+w = pd.DataFrame(x.columns, columns=['Attribute'])
 
+##Concatenating the DataFrames to compare
+coeff_df=pd.concat([w,v], axis=1, join='inner')
 
+##Comparing the predicted value to the actual value:
+y_pred = linreg.predict(x_test)
+y_pred = pd.DataFrame(y_pred, columns=['predicted'])
+y_test 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+##Evaluate the algorithm
+from sklearn import metrics
+print ('Mean Absolute Error:', metrics.mean_absolute_error(y_test, y_pred))
+print ('Mean Squared Error:',metrics.mean_squared_error(y_test, y_pred))
+print ('Root Mean Squared Error:',np.sqrt(y_test, y_pred))
 
 
