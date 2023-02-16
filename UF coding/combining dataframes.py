@@ -249,6 +249,39 @@ cause_of_loss_4_clean_group=cause_of_loss_4_clean.groupby(['COUNTYFP'])[['total_
 
 ##Merge df_merged_final with cause of loss
 final_data = pd.merge(df_merged_final,cause_of_loss_4_clean_group,on='COUNTYFP', how='left').fillna(0)
+final_data1 = final_data.drop (columns=["NAME","geometry", "STATEFP", "COUNTYFP"])
+
+final_data1 = final_data1.reindex(columns=['indemnity_amount','full_area', '34kt Winds', '34kt_pct','50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct','total_premium'],)
+
+final_data2 = final_data.iloc[:, [12,4,5,6,7,8,9,10,11]]
+final_data2 = final_data2.astype("double")
+final_data2 = final_data2.rename(columns={"64kt_pct":"sixfour_pct"})
+final_data2["sqrt_indemnity_amount"] = np.sqrt(final_data2["indemnity_amount"])
+
+
+# library & dataset
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import statsmodels.api as sm
+import statsmodels.formula.api as sm
+lm = sm.ols(formula = "sqrt_indemnity_amount ~ full_area + sixfour_pct", data=final_data2).fit()
+
+
+
+# with regression
+sns.pairplot(final_data2 , kind="reg", diag_kws={"bins":"sqrt"})
+plt.show()
+
+sns.heatmap(final_data.corr(), annot=True)
+ 
+# without regression
+sns.pairplot(final_data2 , kind="scatter")
+plt.show()
+
+sns.scatterplot(final_data2)
+
+final_data.to_csv(('/Users/xiaomeihai/Desktop/Project/final_data.csv'))
 
 
 ## building a model 
@@ -284,5 +317,6 @@ from sklearn import metrics
 print ('Mean Absolute Error:', metrics.mean_absolute_error(y_test, y_pred))
 print ('Mean Squared Error:',metrics.mean_squared_error(y_test, y_pred))
 print ('Root Mean Squared Error:',np.sqrt(y_test, y_pred))
+
 
 
