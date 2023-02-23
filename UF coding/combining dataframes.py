@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Dec 11 17:48:19 2022
-
-@author: xiaomeihai
-"""
-
 import geopandas as gpd
 from geopandas import GeoSeries, GeoDataFrame
 import matplotlib.pyplot as plt 
@@ -190,7 +182,6 @@ p3gdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(p3))
 p3gdf = p3gdf.set_crs("EPSG:3347", allow_override=True)
 
 ##intersecting and adding area to data frame
-## this is good to use 
 impacted_counties = gpd.overlay(pgdf, county_shapes_12,  how = 'intersection', keep_geom_type=True)
 impacted_counties.plot()
 impacted_counties["Imp_area"] = impacted_counties.geometry.area
@@ -233,30 +224,39 @@ df_merged_final['34kt_pct'] = (df_merged_final["34kt Winds"] / df_merged_final["
 df_merged_final['50kt_pct'] = (df_merged_final["50kt Winds"] / df_merged_final["full_area"])*100
 df_merged_final['64kt_pct'] = (df_merged_final["64kt Winds"] / df_merged_final["full_area"])*100
 df_merged_final = df_merged_final.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry', 'full_area', '34kt Winds', '34kt_pct','50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct'])
+df_merged_final = df_merged_final.drop(columns=["geometry"])
+
 
 #Cause of loss
-cause_of_loss_4 = pd.read_parquet('https://github.com/JackOgozaly/Hurricane_Crop_Acreage/blob/main/Data/Cause_Of_Loss/crop_loss_data_4.parquet.gzip?raw=true')
-cause_of_loss_4 = cause_of_loss_4.rename(columns = {'county_code':'COUNTYFP', 'state_code':'STATEFP'})
+cause_of_loss = pd.read_parquet('https://github.com/JackOgozaly/Hurricane_Crop_Acreage/blob/main/Data/Cause_Of_Loss/crop_loss_data_4.parquet.gzip?raw=true')
+cause_of_loss = cause_of_loss.rename(columns = {'county_code':'COUNTYFP', 'state_code':'STATEFP'})
 
 #Cause of loss clean
-cause_of_loss_4_clean = cause_of_loss_4.drop(columns=["insurance_plan_name_abbreviation","subsidy","state/private_subsidy","additional_subsidy","efa_premium_discount","producer_paid_premium","insurance_plan_code","stage_code","net_endorsed_acres"])
-cause_of_loss_4_clean = cause_of_loss_4_clean[cause_of_loss_4_clean['year_of_loss'] == 2017]
-cause_of_loss_4_clean = cause_of_loss_4_clean[(cause_of_loss_4_clean['month_of_loss'] == '8')|(cause_of_loss_4_clean['month_of_loss'] == '9')]
-cause_of_loss_4_clean = cause_of_loss_4_clean[cause_of_loss_4_clean['cause_of_loss_description'] == 'Hurricane/Tropical Depression']
-cause_of_loss_4_clean = cause_of_loss_4_clean[cause_of_loss_4_clean['STATEFP'] == '12'].reset_index(drop=True)
-cause_of_loss_4_clean = cause_of_loss_4_clean.drop(columns = ['commodity_year_identifier','commodity_code','coverage_category','cause_of_loss_code','policies_earning_premium','policies_identified'])
-cause_of_loss_4_clean_group=cause_of_loss_4_clean.groupby(['COUNTYFP'])[['total_premium','indemnity_amount']].sum()
+cause_of_loss_clean = cause_of_loss[cause_of_loss['year_of_loss'] == 2017]
+cause_of_loss_clean = cause_of_loss_clean[(cause_of_loss_clean['month_of_loss'] == '8')|(cause_of_loss_clean['month_of_loss'] == '9')]
+cause_of_loss_clean = cause_of_loss_clean[cause_of_loss_clean['cause_of_loss_description'] == 'Hurricane/Tropical Depression']
+cause_of_loss_clean = cause_of_loss_clean[cause_of_loss_clean['STATEFP'] == '12'].reset_index(drop=True)
+cause_of_loss_clean1 = cause_of_loss_clean.drop(cause_of_loss_clean.columns[[0,3,5,6,7,8,9,13,14,16,19,20,21,22,23,26,27]],axis = 1)
+
+cause_of_loss_clean_group=cause_of_loss_clean1.groupby(['COUNTYFP'])[['total_premium','indemnity_amount','net_planted_quantity','liability','net_determined_quantity']].sum()
 
 ##Merge df_merged_final with cause of loss
-final_data = pd.merge(df_merged_final,cause_of_loss_4_clean_group,on='COUNTYFP', how='left').fillna(0)
-final_data1 = final_data.drop (columns=["NAME","geometry", "STATEFP", "COUNTYFP"])
+final_data = pd.merge(df_merged_final,cause_of_loss_clean_group,on='COUNTYFP', how='left').fillna(0)
 
-final_data1 = final_data1.reindex(columns=['indemnity_amount','full_area', '34kt Winds', '34kt_pct','50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct','total_premium'],)
+#Precipitation csv
+precipitation = pd.read_excel('precipitation.xlsx')
+PlantedAcres = pd.read_excel('PlantedAcres.xlsx')
 
-final_data2 = final_data.iloc[:, [12,4,5,6,7,8,9,10,11]]
-final_data2 = final_data2.astype("double")
-final_data2 = final_data2.rename(columns={"64kt_pct":"sixfour_pct"})
-final_data2["sqrt_indemnity_amount"] = np.sqrt(final_data2["indemnity_amount"])
+#Merge cause of loss clean with preciptation dataset
+final_data_pre = pd.merge(final_data,precipitation,on='NAME', how='left')
+final_data_pre = pd.merge(final_data_pre,PlantedAcres,on='NAME', how='left')
+
+
+##prepare the dataset for the model
+## drop the columns not needed
+data1 = final_data_pre.drop (columns=["NAME", "STATEFP", "COUNTYFP","total_premium","net_planted_quantity","net_determined_quantity","liability"])
+##rearrange the columns as indemnity_amount first column
+data1 = data1.iloc[:, [7] + list(range(7)) + list(range(8, len(data1.columns)))]
 
 
 # library & dataset
@@ -265,58 +265,24 @@ import seaborn as sns
 
 import statsmodels.api as sm
 import statsmodels.formula.api as sm
-lm = sm.ols(formula = "sqrt_indemnity_amount ~ full_area + sixfour_pct", data=final_data2).fit()
 
-
-
-# with regression
-sns.pairplot(final_data2 , kind="reg", diag_kws={"bins":"sqrt"})
+# check the correlation bewteen Y variable and the other variables in regression
+sns.pairplot(data1 , kind="reg", diag_kws={"bins":"sqrt"})
 plt.show()
 
-sns.heatmap(final_data.corr(), annot=True)
+##only limited to first 5 columns 
+sns.pairplot(data1.iloc[:, :5], kind="reg", diag_kws={"bins":"sqrt"})
+plt.show() 
+
+##heatmaps
+sns.heatmap(data1.corr(), annot=True)
+
+
+data2 = data1.astype("double")
+data2 = data2.rename(columns={"64kt_pct":"sixfour_pct"})
+data2["sqrt_indemnity_amount"] = np.sqrt(data2["indemnity_amount"])
  
-# without regression
-sns.pairplot(final_data2 , kind="scatter")
-plt.show()
-
-sns.scatterplot(final_data2)
-
-final_data.to_csv(('/Users/xiaomeihai/Desktop/Project/final_data.csv'))
-
-
-## building a model 
-##Set up the dependent and the independent variables
-final_data
-x=pd.DataFrame(final_data.iloc[:,4:-1])
-y=pd.DataFrame(final_data.iloc[:,-1])
-
-##Divide the data into train and test sets
-from sklearn.model_selection import train_test_split
-x_train, x_test, y_train, y_test = train_test_split(x,y,test_size= 0.2, random_state=5)
-
-
-##Train the algorithm:
-from sklearn import linear_model as lm
-linreg = lm.LinearRegression()
-linreg.fit(x_train, y_train)
-
-##Having a look at the coefficients that the model has chosen
-v = pd.DataFrame(linreg.coef_, index=['co-efficient']).transpose()
-w = pd.DataFrame(x.columns, columns=['Attribute'])
-
-##Concatenating the DataFrames to compare
-coeff_df=pd.concat([w,v], axis=1, join='inner')
-
-##Comparing the predicted value to the actual value:
-y_pred = linreg.predict(x_test)
-y_pred = pd.DataFrame(y_pred, columns=['predicted'])
-y_test 
-
-##Evaluate the algorithm
-from sklearn import metrics
-print ('Mean Absolute Error:', metrics.mean_absolute_error(y_test, y_pred))
-print ('Mean Squared Error:',metrics.mean_squared_error(y_test, y_pred))
-print ('Root Mean Squared Error:',np.sqrt(y_test, y_pred))
-
-
+##model1
+lm = sm.ols(formula = "sqrt_indemnity_amount ~ full_area + sixfour_pct + PlantedAcres + pcp", data=data2).fit()
+print(lm.summary())
 
