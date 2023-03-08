@@ -149,22 +149,17 @@ hurricane_df = pd.read_csv(
     r'https://raw.githubusercontent.com/JackOgozaly/Hurricane_Crop_Acreage/main/Data/historical_hurricane_date.csv')
 
 # Use our function for the different wind speeds
-hurricane_irma_ts = hurricane_shapefile(
-    hurricane_df, 'AL112017', wind_speed=34)
-hurricane_irma_tc = hurricane_shapefile(
-    hurricane_df, 'AL112017', wind_speed=50)
+hurricane_irma_ts = hurricane_shapefile(hurricane_df, 'AL112017', wind_speed=34)
+hurricane_irma_tc = hurricane_shapefile(hurricane_df, 'AL112017', wind_speed=50)
 hurricane_irma_h = hurricane_shapefile(hurricane_df, 'AL112017', wind_speed=64)
 
 # version of the wind speed plot
 
-county_shapes = gpd.read_file(
-    'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_county_500k.zip')
-county_shapes_12 = county_shapes[county_shapes['STATEFP'] == '12'].reset_index(
-    drop=True)
+county_shapes = gpd.read_file('https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_county_500k.zip')
+county_shapes_12 = county_shapes[county_shapes['STATEFP'] == '12'].reset_index(drop=True)
 county_shapes_12 = county_shapes_12.set_crs("EPSG:3347", allow_override=True)
 county_shapes_12["full_area"] = county_shapes_12.geometry.area
-county_shapes_12 = county_shapes_12.drop(
-    columns=["COUNTYNS", "AFFGEOID", "GEOID", "LSAD", "ALAND", "AWATER"])
+county_shapes_12 = county_shapes_12.drop(columns=["COUNTYNS", "AFFGEOID", "GEOID", "LSAD", "ALAND", "AWATER"])
 
 # plt.style.use('default')
 fig, ax = plt.subplots(figsize=(10, 8))
@@ -211,95 +206,68 @@ p3gdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(p3))
 p3gdf = p3gdf.set_crs("EPSG:3347", allow_override=True)
 
 # intersecting and adding area to data frame
-impacted_counties = gpd.overlay(
-    pgdf, county_shapes_12,  how='intersection', keep_geom_type=True)
+impacted_counties = gpd.overlay(pgdf, county_shapes_12,  how='intersection', keep_geom_type=True)
 impacted_counties.plot()
 impacted_counties["Imp_area"] = impacted_counties.geometry.area
-impacted_counties['OverlapIntersection'] = (
-    impacted_counties["Imp_area"] / impacted_counties["full_area"])*100
+impacted_counties['OverlapIntersection'] = (impacted_counties["Imp_area"] / impacted_counties["full_area"])*100
 impacted_counties['Wind_Speed'] = '34kt Winds'
-impacted_counties = impacted_counties.reindex(
-    columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry', 'full_area', 'Imp_area', 'OverlapIntersection', 'Wind_Speed'])
+impacted_counties = impacted_counties.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry', 'full_area', 'Imp_area', 'OverlapIntersection', 'Wind_Speed'])
 
 # need to add 0 to N/A county before calculate
-impacted_counties2 = gpd.overlay(
-    county_shapes_12, p2gdf, how='intersection', keep_geom_type=True)
+impacted_counties2 = gpd.overlay(county_shapes_12, p2gdf, how='intersection', keep_geom_type=True)
 impacted_counties2["Imp_area"] = impacted_counties2.geometry.area
 impacted_counties2.plot()
 
-impacted_counties2_merged = pd.merge(county_shapes_12, impacted_counties2[[
-                                     "COUNTYFP", "Imp_area"]], on='COUNTYFP', how='left')
-impacted_counties2_merged["Imp_area"] = impacted_counties2_merged["Imp_area"].fillna(
-    0)
+impacted_counties2_merged = pd.merge(county_shapes_12, impacted_counties2[["COUNTYFP", "Imp_area"]], on='COUNTYFP', how='left')
+impacted_counties2_merged["Imp_area"] = impacted_counties2_merged["Imp_area"].fillna(0)
 
-impacted_counties2_merged['OverlapIntersection'] = (
-    impacted_counties2_merged["Imp_area"] / impacted_counties2_merged["full_area"])*100
+impacted_counties2_merged['OverlapIntersection'] = (impacted_counties2_merged["Imp_area"] / impacted_counties2_merged["full_area"])*100
 impacted_counties2_merged['Wind_Speed'] = '50kt Winds'
 
 # need to add 0 to N/A county before calculate
-impacted_counties3 = gpd.overlay(
-    county_shapes_12, p3gdf, how='intersection', keep_geom_type=True)
+impacted_counties3 = gpd.overlay(county_shapes_12, p3gdf, how='intersection', keep_geom_type=True)
 impacted_counties3["Imp_area"] = impacted_counties3.geometry.area
 impacted_counties3.plot()
 
-impacted_counties3_merged = pd.merge(county_shapes_12, impacted_counties3[[
-                                     "COUNTYFP", "Imp_area"]], on='COUNTYFP', how='left')
-impacted_counties3_merged["Imp_area"] = impacted_counties3_merged["Imp_area"].fillna(
-    0)
+impacted_counties3_merged = pd.merge(county_shapes_12, impacted_counties3[["COUNTYFP", "Imp_area"]], on='COUNTYFP', how='left')
+impacted_counties3_merged["Imp_area"] = impacted_counties3_merged["Imp_area"].fillna(0)
 
-impacted_counties3_merged['OverlapIntersection'] = (
-    impacted_counties3_merged["Imp_area"] / impacted_counties3_merged["full_area"])*100
+impacted_counties3_merged['OverlapIntersection'] = (impacted_counties3_merged["Imp_area"] / impacted_counties3_merged["full_area"])*100
 impacted_counties3_merged['Wind_Speed'] = '64kt Winds'
 
 # Appending three dfs
-impacted_counties_final = impacted_counties.append(
-    [impacted_counties2_merged, impacted_counties3_merged])
+impacted_counties_final = impacted_counties.append([impacted_counties2_merged, impacted_counties3_merged])
 
 # Wind to Columns
-df_wind_col = impacted_counties_final.groupby(['COUNTYFP', 'Wind_Speed'])[
-    ['Imp_area']].sum().reset_index()
-df_wind_col = df_wind_col.set_index(
-    ['COUNTYFP', 'Wind_Speed']).Imp_area.unstack(fill_value='')
+df_wind_col = impacted_counties_final.groupby(['COUNTYFP', 'Wind_Speed'])[['Imp_area']].sum().reset_index()
+df_wind_col = df_wind_col.set_index(['COUNTYFP', 'Wind_Speed']).Imp_area.unstack(fill_value='')
 
 # Merged datasets
-df_merged_final = pd.merge(
-    county_shapes_12, df_wind_col, how='left', on='COUNTYFP')
-df_merged_final['34kt_pct'] = (
-    df_merged_final["34kt Winds"] / df_merged_final["full_area"])*100
-df_merged_final['50kt_pct'] = (
-    df_merged_final["50kt Winds"] / df_merged_final["full_area"])*100
-df_merged_final['64kt_pct'] = (
-    df_merged_final["64kt Winds"] / df_merged_final["full_area"])*100
-df_merged_final = df_merged_final.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry',
-                                          'full_area', '34kt Winds', '34kt_pct', '50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct'])
+df_merged_final = pd.merge(county_shapes_12, df_wind_col, how='left', on='COUNTYFP')
+df_merged_final['34kt_pct'] = (df_merged_final["34kt Winds"] / df_merged_final["full_area"])*100
+df_merged_final['50kt_pct'] = (df_merged_final["50kt Winds"] / df_merged_final["full_area"])*100
+df_merged_final['64kt_pct'] = (df_merged_final["64kt Winds"] / df_merged_final["full_area"])*100
+df_merged_final = df_merged_final.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry','full_area', '34kt Winds', '34kt_pct', '50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct'])
 df_merged_final = df_merged_final.drop(columns=["geometry"])
 
 
 # Cause of loss
-cause_of_loss = pd.read_parquet(
-    'https://github.com/JackOgozaly/Hurricane_Crop_Acreage/blob/main/Data/Cause_Of_Loss/crop_loss_data_4.parquet.gzip?raw=true')
-cause_of_loss = cause_of_loss.rename(
-    columns={'county_code': 'COUNTYFP', 'state_code': 'STATEFP'})
+cause_of_loss = pd.read_parquet('https://github.com/JackOgozaly/Hurricane_Crop_Acreage/blob/main/Data/Cause_Of_Loss/crop_loss_data_4.parquet.gzip?raw=true')
+cause_of_loss = cause_of_loss.rename(columns={'county_code': 'COUNTYFP', 'state_code': 'STATEFP'})
 
 # Cause of loss clean
 cause_of_loss_clean = cause_of_loss[cause_of_loss['year_of_loss'] == 2017]
-cause_of_loss_clean = cause_of_loss_clean[(cause_of_loss_clean['month_of_loss'] == '8') | (
-    cause_of_loss_clean['month_of_loss'] == '9')]
-cause_of_loss_clean = cause_of_loss_clean[cause_of_loss_clean['cause_of_loss_description']
-                                          == 'Hurricane/Tropical Depression']
-cause_of_loss_clean = cause_of_loss_clean[cause_of_loss_clean['STATEFP'] == '12'].reset_index(
-    drop=True)
-cause_of_loss_clean1 = cause_of_loss_clean.drop(cause_of_loss_clean.columns[[
-                                                0, 3, 5, 6, 7, 8, 9, 13, 14, 16, 19, 20, 21, 22, 23, 26, 27]], axis=1)
+cause_of_loss_clean = cause_of_loss_clean[(cause_of_loss_clean['month_of_loss'] == '8') | (cause_of_loss_clean['month_of_loss'] == '9')]
+cause_of_loss_clean = cause_of_loss_clean[cause_of_loss_clean['cause_of_loss_description']== 'Hurricane/Tropical Depression']
+cause_of_loss_clean = cause_of_loss_clean[cause_of_loss_clean['STATEFP'] == '12'].reset_index(drop=True)
+cause_of_loss_clean1 = cause_of_loss_clean.drop(cause_of_loss_clean.columns[[0, 3, 5, 6, 7, 8, 9, 13, 14, 16, 19, 20, 21, 22, 23, 26, 27]], axis=1)
 
-cause_of_loss_clean_group = cause_of_loss_clean1.groupby(['COUNTYFP'])[
-    ['total_premium', 'indemnity_amount', 'net_planted_quantity', 'liability', 'net_determined_quantity']].sum()
+cause_of_loss_clean_group = cause_of_loss_clean1.groupby(['COUNTYFP'])[['total_premium', 'indemnity_amount', 'net_planted_quantity', 'liability', 'net_determined_quantity']].sum()
 
 # Merge df_merged_final with cause of loss
-final_data = pd.merge(df_merged_final, cause_of_loss_clean_group,
-                      on='COUNTYFP', how='left').fillna(0)
+final_data = pd.merge(df_merged_final, cause_of_loss_clean_group,on='COUNTYFP', how='left').fillna(0)
 
-# Precipitation csv https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/mapping/8/pcp/201709/2/value
+# Precipitation csv: https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/mapping/8/pcp/201709/2/value
 precipitation = pd.read_excel('precipitation.xlsx')
 
 # Crop Acreage Data: https://www.fsa.usda.gov/news-room/efoia/electronic-reading-room/frequently-requested-information/crop-acreage-data/index
@@ -308,6 +276,7 @@ PlantedAcres = pd.read_excel('PlantedAcres.xlsx')
 # Merge cause of loss clean with preciptation dataset
 final_data_pre = pd.merge(final_data, precipitation, on='NAME', how='left')
 final_data_pre = pd.merge(final_data_pre, PlantedAcres, on='NAME', how='left')
+final_data_pre.to_csv('/Users/xiaomeihai/Desktop//Project/final_data_pre.csv')
 
 
 # prepare the dataset for the model
@@ -336,6 +305,8 @@ data1["sqrt_indemnity_amount"] = np.sqrt(data1["indemnity_amount"])
 data1["reciprocal_indemnity_amount"] = 1/data1["indemnity_amount"]
 
 
+data1.to_csv('/Users/xiaomeihai/Desktop//Project/data1.csv')
+
 # Box-Cox Transformation- cannot be used since we have 0 in indemnity_amount
 #data1["bcx_indemnity_amount"] = bcx_indemnity_amount, lam = boxcox(data1["indemnity_amount"])
 # lam is the best lambda for the distribution
@@ -363,8 +334,6 @@ plt.show()
 
 # heatmaps
 sns.heatmap(datasqrt.corr(), annot=True)
-
-
 
 
 # ******************************************************************************
@@ -468,4 +437,6 @@ ax.set_xlabel('Predicted values')
 ax.set_ylabel('Residuals')
 ax.set_title('Residuals plot')
 plt.show()
+
+
 
