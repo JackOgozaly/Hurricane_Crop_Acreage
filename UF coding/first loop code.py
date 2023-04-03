@@ -130,12 +130,7 @@ def hurricane_shapefile(df, storm_id, wind_speed = 34, quadrant_points = 30):
 
 # Load the Hurricane Dataset
 hurricane_df = pd.read_csv(r'https://raw.githubusercontent.com/JackOgozaly/Hurricane_Crop_Acreage/main/Data/historical_hurricane_date.csv')
-new_df = pd.DataFrame({
-    "year": pd.to_datetime(hurricane_df["date"]).dt.year,
-    "month": pd.to_datetime(hurricane_df["date"]).dt.month,
-    "date": pd.to_datetime(hurricane_df["date"]).dt.day
-})
-hurricane_df1 = pd.concat([hurricane_df, new_df], axis=1)
+
 hurricane_missing_val = hurricane_df.groupby("id")["64kt_wind_radii_SE_quad"].apply(lambda x: x.isnull().sum()).to_frame(name = "na_count")
 hurricane_numb_obs = hurricane_df.groupby("id")["34kt_wind_radii_SE_quad"].apply(lambda x: len(x)).to_frame(name = "tot_count")
 hurricane_no_pass = hurricane_df.groupby("id")["34kt_wind_radii_SE_quad"].apply(lambda x: sum(x==0)).to_frame(name = "zero_count")
@@ -181,7 +176,6 @@ def get_percentage(h_id):
     hurricane_tsn = hurricane_shapefile(df_new, h_id, wind_speed=34)
     ## county shapefile and plot
     county_shapes = gpd.read_file('https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_county_500k.zip')
-    fig, ax = plt.subplots(figsize=(30,24))
     #Create our county shapefiles and plot them
     county_shapes_12 = county_shapes[county_shapes['STATEFP'] == '12'].reset_index(drop=True)
     county_shapes_12["full_area"] = county_shapes_12.geometry.area
@@ -195,7 +189,7 @@ def get_percentage(h_id):
     # changing series to dataframe
     def create_gdf(point_series):
         gdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(point_series))
-        gdf.set_crs("EPSG:3347", allow_override=True, inplace=True)
+        gdf.set_crs("EPSG:4269", allow_override=True, inplace=True)
         return gdf
 
     pgdf = create_gdf(p)
@@ -205,6 +199,7 @@ def get_percentage(h_id):
     wind_speeds = ['64kt Winds', '50kt Winds', '34kt Winds']
     p_data = [pgdf, p1gdf, p2gdf]
     impacted_counties_final = pd.DataFrame()
+    county_shapes_12.to_crs("EPSG:4269")
     for i, p in enumerate(p_data):
         impacted_counties = gpd.overlay(county_shapes_12, p, how='intersection', keep_geom_type=True)
         impacted_counties["Imp_area"] = impacted_counties.geometry.area
@@ -225,11 +220,10 @@ def get_percentage(h_id):
     df_merged_final = df_merged_final.reindex(columns=['STATEFP', 'COUNTYFP', 'NAME', 'geometry','full_area', '34kt Winds', '34kt_pct', '50kt Winds', '50kt_pct', '64kt Winds', '64kt_pct'])
     df_merged = df_merged_final.drop(columns=["geometry","STATEFP"])
     df_merged ["id"] = h_id 
-    df_final = df_merged.merge(hurricane_df1[["id", "year"]], on="id", how="inner").drop_duplicates()
-    return(df_final)
+    df_merged["year"] = pd.to_datetime(sub_hurricane_df.date[0]).year
+    return(df_merged)
 
 dff = pd.DataFrame()
 for i in hurricane_ids:
-    dff.append(get_percentage(i))
-
-
+    dff = dff.append(get_percentage(i))
+    
