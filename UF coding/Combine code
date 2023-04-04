@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Apr  3 18:03:06 2023
+
+@author: xiaomeihai
+"""
+
+import pandas as pd
+
+# Read the CSV file
+hurricane_df = pd.read_csv('https://raw.githubusercontent.com/JackOgozaly/Hurricane_Crop_Acreage/main/Data/historical_hurricane_date.csv')
+
+# Create a new DataFrame with year, month, and date columns
+new_df = pd.DataFrame({
+    'year': pd.to_datetime(hurricane_df['date']).dt.year,
+    'month': pd.to_datetime(hurricane_df['date']).dt.month,
+    'date': pd.to_datetime(hurricane_df['date']).dt.day
+})
+
+# Concatenate the new DataFrame with the original DataFrame
+hurricane_df = pd.concat([hurricane_df, new_df], axis=1)
+
+# Group the data by hurricane ID and create a new DataFrame with distinct year and month values
+distinct_df = hurricane_df.groupby('id').agg({'year': lambda x: list(set(x)), 'month': lambda x: list(set(x))}).reset_index()
+distinct_df.columns = ['hurricane_id', 'year', 'month']
+
+# Filter the data for hurricanes that occurred after 2005 and reset the index
+H2 = distinct_df[distinct_df['year'].apply(lambda x: x[0] >= 2005)].reset_index(drop=True)
+
+
+
+cause_of_loss = pd.DataFrame()
+
+for i in range(0,6):
+    cause_of_loss = cause_of_loss.append(pd.read_parquet(f'https://github.com/JackOgozaly/Hurricane_Crop_Acreage/blob/main/Data/Cause_Of_Loss/crop_loss_data_{i}.parquet.gzip?raw=true'))
+
+cause_of_loss = cause_of_loss.rename(columns={'county_code': 'COUNTYFP', 'state_code': 'STATEFP'})
+cause_of_loss = cause_of_loss.loc[cause_of_loss["year_of_loss"] >= 2005]
+cause_of_loss = cause_of_loss.drop(cause_of_loss[cause_of_loss["year_of_loss"] == 9999].index)
+cause_of_loss1 = cause_of_loss[["STATEFP","COUNTYFP","month_of_loss","year_of_loss","total_premium","indemnity_amount"]]
+cause_of_loss1 = cause_of_loss1[(cause_of_loss1['STATEFP'] == '12') & (cause_of_loss1['COUNTYFP'] != '999')].reset_index(drop=True)
+
+
+CL_Agg= pd.DataFrame()
+for i in range(len(H2)):
+    # sub_CL=cause_of_loss1[(cause_of_loss1.year_of_loss==H2.year[i][0]) & cause_of_loss1.month_of_loss.isin([str(i) for i in H2.month[i]])]
+   sub_CL = pd.DataFrame()
+for i in range(len(H2)):
+    for year in H2['year'][i]:
+        for month in H2['month'][i]:
+            sub_CL_temp = cause_of_loss1[(cause_of_loss1.year_of_loss == year) & (cause_of_loss1.month_of_loss == str(month))]
+            sub_CL_temp['id'] = H2['hurricane_id'][i]
+            sub_CL = sub_CL.append(sub_CL_temp).reset_index(drop=True)
+
+    InSum = sub_CL.groupby("COUNTYFP")["indemnity_amount"].sum().reset_index()  # added reset_index here
+    PreSum = sub_CL.groupby("COUNTYFP")["total_premium"].sum().reset_index()  # added reset_index here
+    CK = InSum.merge(PreSum, on="COUNTYFP", how="left")
+    CK["id"] = H2['hurricane_id'][i]
+    CL_Agg = sub_CL.append(CK).reset_index(drop=True)
+    
+           
+CL_Agg.to_csv('/Users/xiaomeihai/Desktop//Project/CL_Agg.csv')
+CL_Agg.to_excel('CL_Agg.xlsx', index=False)
+
